@@ -1,0 +1,32 @@
+name: pdf_letter_signer
+description: Cross-platform Flutter PDF letter editor and signature starter using Clean Architecture, BLoC, and GetIt.
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.7.0 <4.0.0"
+  flutter: ">=3.32.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  flutter_bloc: ^9.1.1
+  bloc: ^9.0.0
+  get_it: ^8.3.0
+  equatable: ^2.0.7
+  file_picker: ^12.0.0-beta.7
+  syncfusion_flutter_pdfviewer: ^34.1.29
+  syncfusion_flutter_pdf: ^34.1.29
+  signature: ^6.3.0
+  uuid: ^4.5.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  bloc_test: ^10.0.0
+  mocktail: ^1.0.4
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
