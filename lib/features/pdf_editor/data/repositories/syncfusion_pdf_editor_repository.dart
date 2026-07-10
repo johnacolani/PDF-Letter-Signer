@@ -13,16 +13,20 @@ class SyncfusionPdfEditorRepository implements PdfEditorRepository {
   }) async {
     final document = PdfDocument(inputBytes: sourcePdf);
     try {
-      if (placement.pageIndex < 0 || placement.pageIndex >= document.pages.count) {
+      if (placement.pageIndex < 0 ||
+          placement.pageIndex >= document.pages.count) {
         throw RangeError('The selected PDF page does not exist.');
       }
 
       final page = document.pages[placement.pageIndex];
       final pageSize = page.getClientSize();
-      final left = placement.x.clamp(0.0, 1.0) * pageSize.width;
-      final top = placement.y.clamp(0.0, 1.0) * pageSize.height;
       final width = placement.width.clamp(0.01, 1.0) * pageSize.width;
       final height = placement.height.clamp(0.01, 1.0) * pageSize.height;
+      final left =
+          placement.x.clamp(0.0, 1.0 - width / pageSize.width) * pageSize.width;
+      final top =
+          placement.y.clamp(0.0, 1.0 - height / pageSize.height) *
+          pageSize.height;
 
       page.graphics.drawImage(
         PdfBitmap(placement.pngBytes),

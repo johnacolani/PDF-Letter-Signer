@@ -20,7 +20,8 @@ dependencies:
   syncfusion_flutter_pdf: ^34.1.29
   signature: ^6.3.0
   uuid: ^4.5.1
-
+  country_state_city: 0.1.6
+  syncfusion_pdfviewer_platform_interface: 34.1.30
 dev_dependencies:
   flutter_test:
     sdk: flutter

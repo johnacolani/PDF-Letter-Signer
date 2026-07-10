@@ -29,17 +29,15 @@ void main() {
       pngBytes: Uint8List.fromList([7]),
     );
 
-    when(() => repository.exportSignedPdf(
-          sourcePdf: source,
-          placement: placement,
-        )).thenAnswer((_) async => output);
+    when(
+      () => repository.exportSignedPdf(sourcePdf: source, placement: placement),
+    ).thenAnswer((_) async => output);
 
     final result = await usecase(sourcePdf: source, placement: placement);
 
     expect(result, output);
-    verify(() => repository.exportSignedPdf(
-          sourcePdf: source,
-          placement: placement,
-        )).called(1);
+    verify(
+      () => repository.exportSignedPdf(sourcePdf: source, placement: placement),
+    ).called(1);
   });
 }

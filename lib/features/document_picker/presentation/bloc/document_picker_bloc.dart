@@ -5,7 +5,8 @@ import 'package:pdf_letter_signer/features/document_picker/domain/document_sourc
 part 'document_picker_event.dart';
 part 'document_picker_state.dart';
 
-class DocumentPickerBloc extends Bloc<DocumentPickerEvent, DocumentPickerState> {
+class DocumentPickerBloc
+    extends Bloc<DocumentPickerEvent, DocumentPickerState> {
   DocumentPickerBloc(this._picker) : super(const DocumentPickerInitial()) {
     on<DocumentPickerRequested>(_onRequested);
   }
@@ -19,9 +20,11 @@ class DocumentPickerBloc extends Bloc<DocumentPickerEvent, DocumentPickerState> 
     emit(const DocumentPickerLoading());
     try {
       final document = await _picker.pickPdf();
-      emit(document == null
-          ? const DocumentPickerInitial()
-          : DocumentPickerSuccess(document));
+      emit(
+        document == null
+            ? const DocumentPickerInitial()
+            : DocumentPickerSuccess(document),
+      );
     } catch (error) {
       emit(DocumentPickerFailure(error.toString()));
     }

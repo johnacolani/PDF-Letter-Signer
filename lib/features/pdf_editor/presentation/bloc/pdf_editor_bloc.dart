@@ -12,8 +12,10 @@ part 'pdf_editor_state.dart';
 class PdfEditorBloc extends Bloc<PdfEditorEvent, PdfEditorState> {
   PdfEditorBloc(this._exportSignedPdf) : super(const PdfEditorInitial()) {
     on<PdfEditorDocumentOpened>(_onOpened);
+    on<PdfEditorDocumentUpdated>(_onDocumentUpdated);
     on<PdfEditorSignaturePlaced>(_onPlaced);
     on<PdfEditorSignatureMoved>(_onMoved);
+    on<PdfEditorSignatureTransformed>(_onTransformed);
     on<PdfEditorPageChanged>(_onPageChanged);
     on<PdfEditorExportRequested>(_onExportRequested);
     on<PdfEditorExportConsumed>(_onExportConsumed);
@@ -25,6 +27,15 @@ class PdfEditorBloc extends Bloc<PdfEditorEvent, PdfEditorState> {
     emit(PdfEditorReady(document: event.document));
   }
 
+  void _onDocumentUpdated(
+    PdfEditorDocumentUpdated event,
+    Emitter<PdfEditorState> emit,
+  ) {
+    final current = state;
+    if (current is! PdfEditorReady) return;
+    emit(current.copyWith(document: event.document, clearExport: true));
+  }
+
   void _onPlaced(PdfEditorSignaturePlaced event, Emitter<PdfEditorState> emit) {
     final current = state;
     if (current is! PdfEditorReady) return;
@@ -34,13 +45,38 @@ class PdfEditorBloc extends Bloc<PdfEditorEvent, PdfEditorState> {
   void _onMoved(PdfEditorSignatureMoved event, Emitter<PdfEditorState> emit) {
     final current = state;
     if (current is! PdfEditorReady || current.signature == null) return;
-    emit(current.copyWith(
-      signature: current.signature!.copyWith(x: event.x, y: event.y),
-      clearExport: true,
-    ));
+    emit(
+      current.copyWith(
+        signature: current.signature!.copyWith(x: event.x, y: event.y),
+        clearExport: true,
+      ),
+    );
   }
 
-  void _onPageChanged(PdfEditorPageChanged event, Emitter<PdfEditorState> emit) {
+  void _onTransformed(
+    PdfEditorSignatureTransformed event,
+    Emitter<PdfEditorState> emit,
+  ) {
+    final current = state;
+    if (current is! PdfEditorReady || current.signature == null) return;
+    emit(
+      current.copyWith(
+        signature: current.signature!.copyWith(
+          pageIndex: event.pageIndex,
+          x: event.x,
+          y: event.y,
+          width: event.width,
+          height: event.height,
+        ),
+        clearExport: true,
+      ),
+    );
+  }
+
+  void _onPageChanged(
+    PdfEditorPageChanged event,
+    Emitter<PdfEditorState> emit,
+  ) {
     final current = state;
     if (current is! PdfEditorReady) return;
     emit(current.copyWith(currentPageIndex: event.pageIndex));
@@ -60,7 +96,9 @@ class PdfEditorBloc extends Bloc<PdfEditorEvent, PdfEditorState> {
       );
       emit(current.copyWith(isExporting: false, exportedBytes: bytes));
     } catch (error) {
-      emit(current.copyWith(isExporting: false, errorMessage: error.toString()));
+      emit(
+        current.copyWith(isExporting: false, errorMessage: error.toString()),
+      );
     }
   }
 

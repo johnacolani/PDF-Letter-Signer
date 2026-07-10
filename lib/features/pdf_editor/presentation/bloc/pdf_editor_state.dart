@@ -28,6 +28,7 @@ final class PdfEditorReady extends PdfEditorState {
   final String? errorMessage;
 
   PdfEditorReady copyWith({
+    PickedPdfDocument? document,
     SignaturePlacement? signature,
     int? currentPageIndex,
     bool? isExporting,
@@ -37,7 +38,7 @@ final class PdfEditorReady extends PdfEditorState {
     bool clearError = false,
   }) {
     return PdfEditorReady(
-      document: document,
+      document: document ?? this.document,
       signature: signature ?? this.signature,
       currentPageIndex: currentPageIndex ?? this.currentPageIndex,
       isExporting: isExporting ?? this.isExporting,
@@ -48,12 +49,11 @@ final class PdfEditorReady extends PdfEditorState {
 
   @override
   List<Object?> get props => [
-        document.name,
-        document.bytes.length,
-        signature,
-        currentPageIndex,
-        isExporting,
-        exportedBytes?.length,
-        errorMessage,
-      ];
+    document,
+    signature,
+    currentPageIndex,
+    isExporting,
+    exportedBytes,
+    errorMessage,
+  ];
 }

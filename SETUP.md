@@ -7,7 +7,7 @@
 5. Add the Syncfusion license registration if required.
 6. Run `flutter analyze`.
 7. Run `flutter test`.
-8. Launch one platform and verify open → sign → drag → export.
+8. Launch one platform and verify open -> sign -> drag -> export.
 
 ## Platform notes
 

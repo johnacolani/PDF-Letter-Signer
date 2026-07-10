@@ -32,7 +32,10 @@ class _SignatureDialogState extends State<SignatureDialog> {
 
   Future<void> _accept() async {
     if (_controller.isEmpty) return;
-    final Uint8List? bytes = await _controller.toPngBytes(height: 320, width: 720);
+    final Uint8List? bytes = await _controller.toPngBytes(
+      height: 320,
+      width: 720,
+    );
     if (bytes != null && mounted) Navigator.of(context).pop(bytes);
   }
 

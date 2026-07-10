@@ -67,4 +67,9 @@ Syncfusion packages require an appropriate Syncfusion license. Confirm whether t
 
 ## Verification
 
-This environment did not have Flutter or Dart installed, so `flutter analyze` and `flutter test` could not be executed here. Run both commands after generating platform folders and resolving packages.
+Verified with Flutter 3.44.0 and Dart 3.12.0:
+
+- `flutter analyze`
+- `flutter test`
+- `flutter build windows --release`
+- `flutter build web --release`

@@ -10,7 +10,14 @@ final class PdfEditorDocumentOpened extends PdfEditorEvent {
   const PdfEditorDocumentOpened(this.document);
   final PickedPdfDocument document;
   @override
-  List<Object?> get props => [document.name, document.bytes.length];
+  List<Object?> get props => [document];
+}
+
+final class PdfEditorDocumentUpdated extends PdfEditorEvent {
+  const PdfEditorDocumentUpdated(this.document);
+  final PickedPdfDocument document;
+  @override
+  List<Object?> get props => [document];
 }
 
 final class PdfEditorSignaturePlaced extends PdfEditorEvent {
@@ -26,6 +33,25 @@ final class PdfEditorSignatureMoved extends PdfEditorEvent {
   final double y;
   @override
   List<Object?> get props => [x, y];
+}
+
+final class PdfEditorSignatureTransformed extends PdfEditorEvent {
+  const PdfEditorSignatureTransformed({
+    required this.pageIndex,
+    required this.x,
+    required this.y,
+    required this.width,
+    required this.height,
+  });
+
+  final int pageIndex;
+  final double x;
+  final double y;
+  final double width;
+  final double height;
+
+  @override
+  List<Object?> get props => [pageIndex, x, y, width, height];
 }
 
 final class PdfEditorPageChanged extends PdfEditorEvent {

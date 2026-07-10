@@ -38,5 +38,5 @@ class SignaturePlacement extends Equatable {
   }
 
   @override
-  List<Object?> get props => [pageIndex, x, y, width, height, pngBytes.length];
+  List<Object?> get props => [pageIndex, x, y, width, height, pngBytes];
 }

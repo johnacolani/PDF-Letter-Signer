@@ -19,9 +19,9 @@ class HomePage extends StatelessWidget {
             MaterialPageRoute<void>(builder: (_) => const PdfEditorPage()),
           );
         } else if (state case DocumentPickerFailure(:final message)) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(message)),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(message)));
         }
       },
       child: Scaffold(
@@ -63,17 +63,21 @@ class HomePage extends StatelessWidget {
                   BlocBuilder<DocumentPickerBloc, DocumentPickerState>(
                     builder: (context, state) {
                       return FilledButton.icon(
-                        onPressed: state is DocumentPickerLoading
-                            ? null
-                            : () => context
-                                .read<DocumentPickerBloc>()
-                                .add(const DocumentPickerRequested()),
-                        icon: state is DocumentPickerLoading
-                            ? const SizedBox.square(
-                                dimension: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.folder_open),
+                        onPressed:
+                            state is DocumentPickerLoading
+                                ? null
+                                : () => context.read<DocumentPickerBloc>().add(
+                                  const DocumentPickerRequested(),
+                                ),
+                        icon:
+                            state is DocumentPickerLoading
+                                ? const SizedBox.square(
+                                  dimension: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                                : const Icon(Icons.folder_open),
                         label: const Text('Open PDF'),
                       );
                     },
