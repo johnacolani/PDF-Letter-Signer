@@ -13,6 +13,7 @@ import 'package:pdf_letter_signer/features/document_picker/domain/document_sourc
 import 'package:pdf_letter_signer/features/pdf_editor/domain/entities/signature_placement.dart';
 import 'package:pdf_letter_signer/features/pdf_editor/presentation/bloc/pdf_editor_bloc.dart';
 import 'package:pdf_letter_signer/features/pdf_editor/presentation/widgets/draggable_signature_overlay.dart';
+import 'package:pdf_letter_signer/features/pdf_editor/presentation/widgets/pdf_viewer_section.dart';
 import 'package:pdf_letter_signer/features/signature/presentation/bloc/signature_cubit.dart';
 import 'package:pdf_letter_signer/features/signature/presentation/widgets/signature_dialog.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
@@ -35,11 +36,14 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
   Future<PdfThumbnailRenderer>? _thumbnailRenderer;
   final Map<int, Future<ui.Image?>> _thumbnailCache = {};
   int _viewerRevision = 0;
-  double _loadingProgress = 0.05;
-  bool _isDocumentLoading = true;
+  final ValueNotifier<double?> _loadingProgress = ValueNotifier(0.05);
+  final ValueNotifier<int> _currentPageIndex = ValueNotifier(0);
+  final ValueNotifier<_AutosaveStatus> _autosaveStatus = ValueNotifier(
+    const _AutosaveStatus(),
+  );
   bool _isUpdatingSubdivisions = false;
-  bool _isAutosaving = false;
-  DateTime? _lastAutosavedAt;
+  bool _autosaveInProgress = false;
+  bool _autosavePending = false;
   bool _showPageNavigator = false;
   bool _isPrecisePlacementMode = false;
   PdfPageLayoutMode _pageLayoutMode = PdfPageLayoutMode.continuous;
@@ -54,14 +58,12 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
 
   void _startLoadingProgress() {
     _loadingTimer?.cancel();
-    _loadingProgress = 0.05;
-    _isDocumentLoading = true;
+    _loadingProgress.value = 0.05;
     _loadingTimer = Timer.periodic(const Duration(milliseconds: 120), (_) {
-      if (!mounted || !_isDocumentLoading || _loadingProgress >= 0.90) return;
-      setState(() {
-        final remaining = 0.90 - _loadingProgress;
-        _loadingProgress += remaining.clamp(0.01, 0.06);
-      });
+      final progress = _loadingProgress.value;
+      if (!mounted || progress == null || progress >= 0.90) return;
+      final remaining = 0.90 - progress;
+      _loadingProgress.value = progress + remaining.clamp(0.01, 0.06);
     });
   }
 
@@ -76,16 +78,16 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
           (index) => details.document.pages[index].getClientSize(),
         ),
       );
-    setState(() => _loadingProgress = 1);
+    _loadingProgress.value = 1;
     Future<void>.delayed(const Duration(milliseconds: 250), () {
-      if (mounted) setState(() => _isDocumentLoading = false);
+      if (mounted) _loadingProgress.value = null;
     });
   }
 
   void _onDocumentLoadFailed(PdfDocumentLoadFailedDetails details) {
     _loadingTimer?.cancel();
     if (!mounted) return;
-    setState(() => _isDocumentLoading = false);
+    _loadingProgress.value = null;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Unable to open PDF: ${details.description}')),
     );
@@ -94,7 +96,6 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
   void _changeZoom(double amount) {
     final nextZoom = (_viewerController.zoomLevel + amount).clamp(1.0, 3.0);
     _viewerController.zoomLevel = nextZoom;
-    setState(() {});
   }
 
   void _fitOnePage() {
@@ -155,7 +156,7 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
 
     _lastBirthCountry = country;
     _isUpdatingSubdivisions = true;
-    setState(_startLoadingProgress);
+    _startLoadingProgress();
     try {
       final currentBytes = Uint8List.fromList(
         await _viewerController.saveDocument(),
@@ -168,6 +169,8 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
       if (!mounted) return;
 
       final current = context.read<PdfEditorBloc>().state;
+      await _replaceViewerDocument(updatedBytes);
+      if (!mounted) return;
       if (current is PdfEditorReady) {
         context.read<PdfEditorBloc>().add(
           PdfEditorDocumentUpdated(
@@ -179,14 +182,10 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
           ),
         );
       }
-      setState(() {
-        _viewerBytes = updatedBytes;
-        _viewerRevision++;
-      });
     } catch (error) {
       if (!mounted) return;
       _loadingTimer?.cancel();
-      setState(() => _isDocumentLoading = false);
+      _loadingProgress.value = null;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Could not load provinces: $error')),
       );
@@ -197,23 +196,34 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
 
   void _scheduleAutosave() {
     _autosaveTimer?.cancel();
-    _autosaveTimer = Timer(const Duration(milliseconds: 900), _performAutosave);
+    if (_autosaveInProgress) _autosavePending = true;
+    _autosaveStatus.value = _autosaveStatus.value.copyWith(hasChanges: true);
+    _autosaveTimer = Timer(const Duration(seconds: 4), _performAutosave);
   }
 
-  Future<void> _performAutosave() async {
+  Future<void> _performAutosave({bool force = false}) async {
     if (!mounted) return;
-    if (_isUpdatingSubdivisions || _isDocumentLoading) {
+    if (_autosaveInProgress) {
+      _autosavePending = true;
+      return;
+    }
+    if (!force && (_isUpdatingSubdivisions || _loadingProgress.value != null)) {
       _scheduleAutosave();
       return;
     }
 
     final state = context.read<PdfEditorBloc>().state;
     if (state is! PdfEditorReady || state.document.path == null) return;
-    setState(() => _isAutosaving = true);
+    _autosaveInProgress = true;
+    _autosavePending = false;
+    _autosaveStatus.value = _autosaveStatus.value.copyWith(isSaving: true);
+    final stopwatch = Stopwatch()..start();
     try {
       final bytes = Uint8List.fromList(await _viewerController.saveDocument());
       await autosavePdfBytes(bytes: bytes, sourcePath: state.document.path);
-      if (mounted) setState(() => _lastAutosavedAt = DateTime.now());
+      if (mounted) {
+        _autosaveStatus.value = _AutosaveStatus(lastSavedAt: DateTime.now());
+      }
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -221,8 +231,38 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
         ).showSnackBar(SnackBar(content: Text('Autosave failed: $error')));
       }
     } finally {
-      if (mounted) setState(() => _isAutosaving = false);
+      stopwatch.stop();
+      assert(() {
+        debugPrint('Autosave completed in ${stopwatch.elapsedMilliseconds} ms');
+        return true;
+      }());
+      _autosaveInProgress = false;
+      if (mounted && _autosaveStatus.value.isSaving) {
+        _autosaveStatus.value = _autosaveStatus.value.copyWith(isSaving: false);
+      }
+      if (_autosavePending && mounted) {
+        _autosavePending = false;
+        _scheduleAutosave();
+      }
     }
+  }
+
+  Future<void> _replaceViewerDocument(Uint8List bytes) async {
+    final oldRenderer = _thumbnailRenderer;
+    _thumbnailRenderer = null;
+    final oldImages = _thumbnailCache.values.toList(growable: false);
+    _thumbnailCache.clear();
+    if (oldRenderer != null) {
+      oldRenderer.then((renderer) => renderer.close());
+    }
+    for (final image in oldImages) {
+      image.then((value) => value?.dispose());
+    }
+    if (!mounted) return;
+    setState(() {
+      _viewerBytes = bytes;
+      _viewerRevision++;
+    });
   }
 
   Future<Uint8List> _replaceBirthSubdivisionOptions(
@@ -253,9 +293,16 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
   }
 
   Future<void> _requestExport(PdfEditorReady state) async {
+    _autosaveTimer?.cancel();
     final savedViewerBytes = Uint8List.fromList(
       await _viewerController.saveDocument(),
     );
+    if (state.document.path != null) {
+      await autosavePdfBytes(
+        bytes: savedViewerBytes,
+        sourcePath: state.document.path,
+      );
+    }
     if (!mounted) return;
     context.read<PdfEditorBloc>()
       ..add(
@@ -271,7 +318,14 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
   }
 
   Future<ui.Image?> _renderThumbnail(int pageNumber) async {
-    final renderer = await _thumbnailRenderer!;
+    final state = context.read<PdfEditorBloc>().state;
+    if (state is! PdfEditorReady) return null;
+    final rendererFuture =
+        _thumbnailRenderer ??= PdfThumbnailRenderer.open(
+          _viewerBytes ?? state.document.bytes,
+        );
+    final stopwatch = Stopwatch()..start();
+    final renderer = await rendererFuture;
     final thumbnail = await renderer.render(pageNumber);
     if (thumbnail == null) return null;
 
@@ -283,7 +337,16 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
       ui.PixelFormat.rgba8888,
       completer.complete,
     );
-    return completer.future;
+    final image = await completer.future;
+    stopwatch.stop();
+    assert(() {
+      debugPrint(
+        'Thumbnail $pageNumber rendered in '
+        '${stopwatch.elapsedMilliseconds} ms',
+      );
+      return true;
+    }());
+    return image;
   }
 
   @override
@@ -298,6 +361,9 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
       imageFuture.then((image) => image?.dispose());
     }
     _viewerController.dispose();
+    _loadingProgress.dispose();
+    _currentPageIndex.dispose();
+    _autosaveStatus.dispose();
     super.dispose();
   }
 
@@ -312,7 +378,7 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
     context.read<PdfEditorBloc>().add(
       PdfEditorSignaturePlaced(
         SignaturePlacement(
-          pageIndex: state.currentPageIndex,
+          pageIndex: _currentPageIndex.value,
           x: 0.58,
           y: 0.70,
           width: 0.30,
@@ -371,41 +437,46 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
         }
 
         final signature = state.signature;
-        _thumbnailRenderer ??= PdfThumbnailRenderer.open(
-          _viewerBytes ?? state.document.bytes,
-        );
         return Scaffold(
           appBar: AppBar(
             title: Text(state.document.name),
             actions: [
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 6),
-                child: Tooltip(
-                  message:
-                      _isAutosaving
-                          ? 'Autosaving changes'
-                          : _lastAutosavedAt == null
-                          ? 'Changes autosave after typing'
-                          : 'Changes autosaved',
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (_isAutosaving)
-                        const SizedBox.square(
-                          dimension: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      else
-                        Icon(
-                          _lastAutosavedAt == null
-                              ? Icons.cloud_queue_outlined
-                              : Icons.cloud_done_outlined,
-                          size: 20,
+                child: ValueListenableBuilder<_AutosaveStatus>(
+                  valueListenable: _autosaveStatus,
+                  builder:
+                      (context, status, _) => Tooltip(
+                        message:
+                            status.isSaving
+                                ? 'Autosaving changes'
+                                : status.hasChanges
+                                ? 'Changes autosave after typing'
+                                : status.lastSavedAt == null
+                                ? 'Changes autosave after typing'
+                                : 'Changes autosaved',
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (status.isSaving)
+                              const SizedBox.square(
+                                dimension: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            else
+                              Icon(
+                                status.lastSavedAt == null
+                                    ? Icons.cloud_queue_outlined
+                                    : Icons.cloud_done_outlined,
+                                size: 20,
+                              ),
+                            const SizedBox(width: 5),
+                            Text(status.isSaving ? 'Saving' : 'Autosave'),
+                          ],
                         ),
-                      const SizedBox(width: 5),
-                      Text(_isAutosaving ? 'Saving' : 'Autosave'),
-                    ],
-                  ),
+                      ),
                 ),
               ),
               IconButton(
@@ -541,97 +612,104 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
                               itemCount: _viewerController.pageCount,
                               itemBuilder: (context, index) {
                                 final pageNumber = index + 1;
-                                final selected =
-                                    pageNumber == state.currentPageIndex + 1;
-                                return InkWell(
-                                  onTap:
-                                      () => _viewerController.jumpToPage(
-                                        pageNumber,
-                                      ),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 8,
-                                    ),
-                                    child: Column(
-                                      children: [
-                                        AnimatedContainer(
-                                          duration: const Duration(
-                                            milliseconds: 150,
+                                return ValueListenableBuilder<int>(
+                                  valueListenable: _currentPageIndex,
+                                  builder: (context, currentPageIndex, _) {
+                                    final selected =
+                                        pageNumber == currentPageIndex + 1;
+                                    return InkWell(
+                                      onTap:
+                                          () => _viewerController.jumpToPage(
+                                            pageNumber,
                                           ),
-                                          width: 132,
-                                          height: 150,
-                                          padding: const EdgeInsets.all(3),
-                                          decoration: BoxDecoration(
-                                            color: Colors.white,
-                                            border: Border.all(
-                                              color:
-                                                  selected
-                                                      ? Theme.of(
-                                                        context,
-                                                      ).colorScheme.primary
-                                                      : Theme.of(context)
-                                                          .colorScheme
-                                                          .outlineVariant,
-                                              width: selected ? 3 : 1,
-                                            ),
-                                            borderRadius: BorderRadius.circular(
-                                              4,
-                                            ),
-                                            boxShadow: const [
-                                              BoxShadow(
-                                                blurRadius: 3,
-                                                color: Color(0x22000000),
-                                                offset: Offset(0, 1),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 8,
+                                        ),
+                                        child: Column(
+                                          children: [
+                                            AnimatedContainer(
+                                              duration: const Duration(
+                                                milliseconds: 150,
                                               ),
-                                            ],
-                                          ),
-                                          child: FutureBuilder<ui.Image?>(
-                                            future: _thumbnailCache.putIfAbsent(
-                                              pageNumber,
-                                              () =>
-                                                  _renderThumbnail(pageNumber),
-                                            ),
-                                            builder: (context, snapshot) {
-                                              if (snapshot.hasData) {
-                                                return RawImage(
-                                                  image: snapshot.data,
-                                                  fit: BoxFit.contain,
-                                                );
-                                              }
-                                              if (snapshot.hasError) {
-                                                return const Icon(
-                                                  Icons.broken_image_outlined,
-                                                );
-                                              }
-                                              return const Center(
-                                                child:
-                                                    CircularProgressIndicator(
-                                                      strokeWidth: 2,
+                                              width: 132,
+                                              height: 150,
+                                              padding: const EdgeInsets.all(3),
+                                              decoration: BoxDecoration(
+                                                color: Colors.white,
+                                                border: Border.all(
+                                                  color:
+                                                      selected
+                                                          ? Theme.of(
+                                                            context,
+                                                          ).colorScheme.primary
+                                                          : Theme.of(context)
+                                                              .colorScheme
+                                                              .outlineVariant,
+                                                  width: selected ? 3 : 1,
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                                boxShadow: const [
+                                                  BoxShadow(
+                                                    blurRadius: 3,
+                                                    color: Color(0x22000000),
+                                                    offset: Offset(0, 1),
+                                                  ),
+                                                ],
+                                              ),
+                                              child: FutureBuilder<ui.Image?>(
+                                                future: _thumbnailCache
+                                                    .putIfAbsent(
+                                                      pageNumber,
+                                                      () => _renderThumbnail(
+                                                        pageNumber,
+                                                      ),
                                                     ),
-                                              );
-                                            },
-                                          ),
+                                                builder: (context, snapshot) {
+                                                  if (snapshot.hasData) {
+                                                    return RawImage(
+                                                      image: snapshot.data,
+                                                      fit: BoxFit.contain,
+                                                    );
+                                                  }
+                                                  if (snapshot.hasError) {
+                                                    return const Icon(
+                                                      Icons
+                                                          .broken_image_outlined,
+                                                    );
+                                                  }
+                                                  return const Center(
+                                                    child:
+                                                        CircularProgressIndicator(
+                                                          strokeWidth: 2,
+                                                        ),
+                                                  );
+                                                },
+                                              ),
+                                            ),
+                                            const SizedBox(height: 5),
+                                            Text(
+                                              'Page $pageNumber',
+                                              style: TextStyle(
+                                                fontWeight:
+                                                    selected
+                                                        ? FontWeight.w600
+                                                        : FontWeight.normal,
+                                                color:
+                                                    selected
+                                                        ? Theme.of(
+                                                          context,
+                                                        ).colorScheme.primary
+                                                        : null,
+                                              ),
+                                            ),
+                                          ],
                                         ),
-                                        const SizedBox(height: 5),
-                                        Text(
-                                          'Page $pageNumber',
-                                          style: TextStyle(
-                                            fontWeight:
-                                                selected
-                                                    ? FontWeight.w600
-                                                    : FontWeight.normal,
-                                            color:
-                                                selected
-                                                    ? Theme.of(
-                                                      context,
-                                                    ).colorScheme.primary
-                                                    : null,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
+                                      ),
+                                    );
+                                  },
                                 );
                               },
                             ),
@@ -644,12 +722,10 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      SfPdfViewer.memory(
-                        _viewerBytes ?? state.document.bytes,
-                        key: ValueKey(_viewerRevision),
+                      PdfViewerSection(
+                        bytes: _viewerBytes ?? state.document.bytes,
+                        revision: _viewerRevision,
                         controller: _viewerController,
-                        canShowScrollHead: true,
-                        canShowPaginationDialog: true,
                         pageLayoutMode: _pageLayoutMode,
                         onDocumentLoaded: _onDocumentLoaded,
                         onDocumentLoadFailed: _onDocumentLoadFailed,
@@ -658,24 +734,32 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
                           _placeSignaturePrecisely(details, signature);
                         },
                         onPageChanged: (details) {
-                          context.read<PdfEditorBloc>().add(
-                            PdfEditorPageChanged(details.newPageNumber - 1),
-                          );
+                          final nextIndex = details.newPageNumber - 1;
+                          if (_currentPageIndex.value != nextIndex) {
+                            _currentPageIndex.value = nextIndex;
+                          }
                         },
                       ),
-                      if (signature != null &&
-                          signature.pageIndex == state.currentPageIndex)
-                        DraggableSignatureOverlay(
-                          placement: signature,
-                          onChanged: (x, y, width, height) {
-                            context.read<PdfEditorBloc>().add(
-                              PdfEditorSignatureTransformed(
-                                pageIndex: signature.pageIndex,
-                                x: x,
-                                y: y,
-                                width: width,
-                                height: height,
-                              ),
+                      if (signature != null)
+                        ValueListenableBuilder<int>(
+                          valueListenable: _currentPageIndex,
+                          builder: (context, currentPageIndex, _) {
+                            if (signature.pageIndex != currentPageIndex) {
+                              return const SizedBox.shrink();
+                            }
+                            return DraggableSignatureOverlay(
+                              placement: signature,
+                              onCommitted: (placement) {
+                                context.read<PdfEditorBloc>().add(
+                                  PdfEditorSignatureTransformed(
+                                    pageIndex: placement.pageIndex,
+                                    x: placement.x,
+                                    y: placement.y,
+                                    width: placement.width,
+                                    height: placement.height,
+                                  ),
+                                );
+                              },
                             );
                           },
                         ),
@@ -706,45 +790,13 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
                             ),
                           ),
                         ),
-                      if (_isDocumentLoading)
-                        ColoredBox(
-                          color: Theme.of(
-                            context,
-                          ).colorScheme.surface.withValues(alpha: 0.92),
-                          child: Center(
-                            child: Semantics(
-                              label: 'Opening PDF',
-                              value:
-                                  '${(_loadingProgress * 100).round()} percent',
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  SizedBox.square(
-                                    dimension: 72,
-                                    child: CircularProgressIndicator(
-                                      value: _loadingProgress,
-                                      strokeWidth: 7,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 18),
-                                  Text(
-                                    'Opening PDF',
-                                    style:
-                                        Theme.of(context).textTheme.titleMedium,
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    '${(_loadingProgress * 100).round()}%',
-                                    style:
-                                        Theme.of(
-                                          context,
-                                        ).textTheme.headlineSmall,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
+                      ValueListenableBuilder<double?>(
+                        valueListenable: _loadingProgress,
+                        builder: (context, progress, _) {
+                          if (progress == null) return const SizedBox.shrink();
+                          return _LoadingOverlay(progress: progress);
+                        },
+                      ),
                     ],
                   ),
                 ),
@@ -764,7 +816,12 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
                             icon: const Icon(Icons.draw),
                             label: const Text('Signature'),
                           ),
-                          Text('Page ${state.currentPageIndex + 1}'),
+                          ValueListenableBuilder<int>(
+                            valueListenable: _currentPageIndex,
+                            builder:
+                                (context, pageIndex, _) =>
+                                    Text('Page ${pageIndex + 1}'),
+                          ),
                           TextButton.icon(
                             onPressed:
                                 signature == null || state.isExporting
@@ -780,6 +837,75 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
                   : null,
         );
       },
+    );
+  }
+}
+
+@immutable
+class _AutosaveStatus {
+  const _AutosaveStatus({
+    this.isSaving = false,
+    this.hasChanges = false,
+    this.lastSavedAt,
+  });
+
+  final bool isSaving;
+  final bool hasChanges;
+  final DateTime? lastSavedAt;
+
+  _AutosaveStatus copyWith({
+    bool? isSaving,
+    bool? hasChanges,
+    DateTime? lastSavedAt,
+  }) {
+    return _AutosaveStatus(
+      isSaving: isSaving ?? this.isSaving,
+      hasChanges: hasChanges ?? this.hasChanges,
+      lastSavedAt: lastSavedAt ?? this.lastSavedAt,
+    );
+  }
+}
+
+class _LoadingOverlay extends StatelessWidget {
+  const _LoadingOverlay({required this.progress});
+
+  final double progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final percentage = (progress * 100).round();
+    return RepaintBoundary(
+      child: ColoredBox(
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.92),
+        child: Center(
+          child: Semantics(
+            label: 'Opening PDF',
+            value: '$percentage percent',
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox.square(
+                  dimension: 72,
+                  child: CircularProgressIndicator(
+                    value: progress,
+                    strokeWidth: 7,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  'Opening PDF',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '$percentage%',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

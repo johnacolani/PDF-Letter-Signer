@@ -40,6 +40,11 @@ class PdfThumbnailRenderer {
 
   Future<PdfThumbnailData?> render(int pageNumber, {int width = 124}) async {
     final index = pageNumber - 1;
+    if (index < 0 ||
+        index >= _pageWidths.length ||
+        index >= _pageHeights.length) {
+      return null;
+    }
     final sourceWidth = (_pageWidths[index] as num).toDouble();
     final sourceHeight = (_pageHeights[index] as num).toDouble();
     final height = (width * sourceHeight / sourceWidth).round();

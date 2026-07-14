@@ -33,18 +33,27 @@ class PdfEditorBloc extends Bloc<PdfEditorEvent, PdfEditorState> {
   ) {
     final current = state;
     if (current is! PdfEditorReady) return;
+    if (identical(current.document.bytes, event.document.bytes) &&
+        current.document.name == event.document.name &&
+        current.document.path == event.document.path) {
+      return;
+    }
     emit(current.copyWith(document: event.document, clearExport: true));
   }
 
   void _onPlaced(PdfEditorSignaturePlaced event, Emitter<PdfEditorState> emit) {
     final current = state;
     if (current is! PdfEditorReady) return;
+    if (current.signature == event.placement) return;
     emit(current.copyWith(signature: event.placement, clearExport: true));
   }
 
   void _onMoved(PdfEditorSignatureMoved event, Emitter<PdfEditorState> emit) {
     final current = state;
     if (current is! PdfEditorReady || current.signature == null) return;
+    if (current.signature!.x == event.x && current.signature!.y == event.y) {
+      return;
+    }
     emit(
       current.copyWith(
         signature: current.signature!.copyWith(x: event.x, y: event.y),
@@ -59,6 +68,14 @@ class PdfEditorBloc extends Bloc<PdfEditorEvent, PdfEditorState> {
   ) {
     final current = state;
     if (current is! PdfEditorReady || current.signature == null) return;
+    final signature = current.signature!;
+    if (signature.pageIndex == event.pageIndex &&
+        signature.x == event.x &&
+        signature.y == event.y &&
+        signature.width == event.width &&
+        signature.height == event.height) {
+      return;
+    }
     emit(
       current.copyWith(
         signature: current.signature!.copyWith(
@@ -79,6 +96,7 @@ class PdfEditorBloc extends Bloc<PdfEditorEvent, PdfEditorState> {
   ) {
     final current = state;
     if (current is! PdfEditorReady) return;
+    if (current.currentPageIndex == event.pageIndex) return;
     emit(current.copyWith(currentPageIndex: event.pageIndex));
   }
 
