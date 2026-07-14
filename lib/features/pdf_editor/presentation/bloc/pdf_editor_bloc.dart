@@ -9,6 +9,8 @@ import 'package:pdf_letter_signer/features/pdf_editor/domain/usecases/export_sig
 part 'pdf_editor_event.dart';
 part 'pdf_editor_state.dart';
 
+enum PdfEditorOutputAction { save, print }
+
 class PdfEditorBloc extends Bloc<PdfEditorEvent, PdfEditorState> {
   PdfEditorBloc(this._exportSignedPdf) : super(const PdfEditorInitial()) {
     on<PdfEditorDocumentOpened>(_onOpened);
@@ -18,6 +20,7 @@ class PdfEditorBloc extends Bloc<PdfEditorEvent, PdfEditorState> {
     on<PdfEditorSignatureTransformed>(_onTransformed);
     on<PdfEditorPageChanged>(_onPageChanged);
     on<PdfEditorExportRequested>(_onExportRequested);
+    on<PdfEditorPrintRequested>(_onPrintRequested);
     on<PdfEditorExportConsumed>(_onExportConsumed);
   }
 
@@ -106,13 +109,36 @@ class PdfEditorBloc extends Bloc<PdfEditorEvent, PdfEditorState> {
   ) async {
     final current = state;
     if (current is! PdfEditorReady || current.signature == null) return;
+    await _createOutput(PdfEditorOutputAction.save, current, emit);
+  }
+
+  Future<void> _onPrintRequested(
+    PdfEditorPrintRequested event,
+    Emitter<PdfEditorState> emit,
+  ) async {
+    final current = state;
+    if (current is! PdfEditorReady) return;
+    await _createOutput(PdfEditorOutputAction.print, current, emit);
+  }
+
+  Future<void> _createOutput(
+    PdfEditorOutputAction action,
+    PdfEditorReady current,
+    Emitter<PdfEditorState> emit,
+  ) async {
     emit(current.copyWith(isExporting: true, clearError: true));
     try {
       final bytes = await _exportSignedPdf(
         sourcePdf: current.document.bytes,
-        placement: current.signature!,
+        placement: current.signature,
       );
-      emit(current.copyWith(isExporting: false, exportedBytes: bytes));
+      emit(
+        current.copyWith(
+          isExporting: false,
+          exportedBytes: bytes,
+          outputAction: action,
+        ),
+      );
     } catch (error) {
       emit(
         current.copyWith(isExporting: false, errorMessage: error.toString()),

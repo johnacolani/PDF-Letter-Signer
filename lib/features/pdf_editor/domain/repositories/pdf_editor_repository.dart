@@ -5,6 +5,6 @@ import 'package:pdf_letter_signer/features/pdf_editor/domain/entities/signature_
 abstract interface class PdfEditorRepository {
   Future<Uint8List> exportSignedPdf({
     required Uint8List sourcePdf,
-    required SignaturePlacement placement,
+    SignaturePlacement? placement,
   });
 }

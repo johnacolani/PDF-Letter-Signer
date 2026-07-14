@@ -65,6 +65,10 @@ final class PdfEditorExportRequested extends PdfEditorEvent {
   const PdfEditorExportRequested();
 }
 
+final class PdfEditorPrintRequested extends PdfEditorEvent {
+  const PdfEditorPrintRequested();
+}
+
 final class PdfEditorExportConsumed extends PdfEditorEvent {
   const PdfEditorExportConsumed();
 }

@@ -16,6 +16,7 @@ import 'package:pdf_letter_signer/features/pdf_editor/presentation/widgets/dragg
 import 'package:pdf_letter_signer/features/pdf_editor/presentation/widgets/pdf_viewer_section.dart';
 import 'package:pdf_letter_signer/features/signature/presentation/bloc/signature_cubit.dart';
 import 'package:pdf_letter_signer/features/signature/presentation/widgets/signature_dialog.dart';
+import 'package:printing/printing.dart';
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 
@@ -317,6 +318,31 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
       ..add(const PdfEditorExportRequested());
   }
 
+  Future<void> _requestPrint(PdfEditorReady state) async {
+    _autosaveTimer?.cancel();
+    final currentBytes = Uint8List.fromList(
+      await _viewerController.saveDocument(),
+    );
+    if (state.document.path != null) {
+      await autosavePdfBytes(
+        bytes: currentBytes,
+        sourcePath: state.document.path,
+      );
+    }
+    if (!mounted) return;
+    context.read<PdfEditorBloc>()
+      ..add(
+        PdfEditorDocumentUpdated(
+          PickedPdfDocument(
+            name: state.document.name,
+            bytes: currentBytes,
+            path: state.document.path,
+          ),
+        ),
+      )
+      ..add(const PdfEditorPrintRequested());
+  }
+
   Future<ui.Image?> _renderThumbnail(int pageNumber) async {
     final state = context.read<PdfEditorBloc>().state;
     if (state is! PdfEditorReady) return null;
@@ -407,6 +433,29 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
     );
   }
 
+  Future<void> _printExport(PdfEditorReady state) async {
+    final bytes = state.exportedBytes;
+    if (bytes == null) return;
+    try {
+      await Printing.layoutPdf(
+        name: state.document.name,
+        dynamicLayout: false,
+        windowsModernDialog: true,
+        onLayout: (_) async => bytes,
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Printing failed: $error')));
+      }
+    } finally {
+      if (mounted) {
+        context.read<PdfEditorBloc>().add(const PdfEditorExportConsumed());
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return BlocConsumer<PdfEditorBloc, PdfEditorState>(
@@ -422,7 +471,11 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
         if (state case PdfEditorReady(
           exportedBytes: final bytes?,
         ) when bytes.isNotEmpty) {
-          _saveExport(state);
+          if (state.outputAction == PdfEditorOutputAction.print) {
+            _printExport(state);
+          } else {
+            _saveExport(state);
+          }
         } else if (state case PdfEditorReady(errorMessage: final message?)) {
           ScaffoldMessenger.of(
             context,
@@ -538,6 +591,12 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
                         : Icons.my_location,
                   ),
                 ),
+              IconButton(
+                tooltip: 'Print document',
+                onPressed:
+                    state.isExporting ? null : () => _requestPrint(state),
+                icon: const Icon(Icons.print_outlined),
+              ),
               const SizedBox(width: 4),
               FilledButton.icon(
                 onPressed:
@@ -821,6 +880,14 @@ class _PdfEditorPageState extends State<PdfEditorPage> {
                             builder:
                                 (context, pageIndex, _) =>
                                     Text('Page ${pageIndex + 1}'),
+                          ),
+                          IconButton(
+                            tooltip: 'Print document',
+                            onPressed:
+                                state.isExporting
+                                    ? null
+                                    : () => _requestPrint(state),
+                            icon: const Icon(Icons.print_outlined),
                           ),
                           TextButton.icon(
                             onPressed:

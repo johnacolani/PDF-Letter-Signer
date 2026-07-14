@@ -9,8 +9,9 @@ class SyncfusionPdfEditorRepository implements PdfEditorRepository {
   @override
   Future<Uint8List> exportSignedPdf({
     required Uint8List sourcePdf,
-    required SignaturePlacement placement,
+    SignaturePlacement? placement,
   }) async {
+    if (placement == null) return Uint8List.fromList(sourcePdf);
     final document = PdfDocument(inputBytes: sourcePdf);
     try {
       if (placement.pageIndex < 0 ||

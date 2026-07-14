@@ -17,6 +17,7 @@ final class PdfEditorReady extends PdfEditorState {
     this.currentPageIndex = 0,
     this.isExporting = false,
     this.exportedBytes,
+    this.outputAction,
     this.errorMessage,
   });
 
@@ -25,6 +26,7 @@ final class PdfEditorReady extends PdfEditorState {
   final int currentPageIndex;
   final bool isExporting;
   final Uint8List? exportedBytes;
+  final PdfEditorOutputAction? outputAction;
   final String? errorMessage;
 
   PdfEditorReady copyWith({
@@ -33,6 +35,7 @@ final class PdfEditorReady extends PdfEditorState {
     int? currentPageIndex,
     bool? isExporting,
     Uint8List? exportedBytes,
+    PdfEditorOutputAction? outputAction,
     String? errorMessage,
     bool clearExport = false,
     bool clearError = false,
@@ -43,6 +46,7 @@ final class PdfEditorReady extends PdfEditorState {
       currentPageIndex: currentPageIndex ?? this.currentPageIndex,
       isExporting: isExporting ?? this.isExporting,
       exportedBytes: clearExport ? null : exportedBytes ?? this.exportedBytes,
+      outputAction: clearExport ? null : outputAction ?? this.outputAction,
       errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
     );
   }
@@ -54,6 +58,7 @@ final class PdfEditorReady extends PdfEditorState {
     currentPageIndex,
     isExporting,
     exportedBytes,
+    outputAction,
     errorMessage,
   ];
 }

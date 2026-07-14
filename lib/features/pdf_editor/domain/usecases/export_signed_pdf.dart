@@ -10,7 +10,7 @@ class ExportSignedPdf {
 
   Future<Uint8List> call({
     required Uint8List sourcePdf,
-    required SignaturePlacement placement,
+    SignaturePlacement? placement,
   }) {
     return _repository.exportSignedPdf(
       sourcePdf: sourcePdf,
