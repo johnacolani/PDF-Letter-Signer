@@ -1,371 +1,468 @@
 # Flutter App Icons Guide
 
-This guide explains the icon problem fixed in **PDF Letter Signer** and how to
-set app icons correctly on Windows, web, Android, iOS, macOS, and Linux.
+A simple guide to correctly set application icons for **Flutter** on Windows, Android, iOS, macOS, Web, and Linux.
 
-## Why the icon I added did not appear
+---
 
-Flutter app icons are **native platform resources**. Adding a PNG under
-`assets/`, mentioning it in `pubspec.yaml`, or showing it with `Image.asset()`
-only makes the image available inside the Flutter UI. It does not replace the
-icon used by Windows Explorer, a browser tab, an installed web app, Android,
-iOS, macOS, or a Linux desktop launcher.
+# Why my icon did not appear
 
-Two separate problems existed in this project:
-
-### Windows
-
-`windows/runner/Runner.rc` was already configured to compile this file:
+Placing an image inside:
 
 ```text
-windows/runner/resources/app_icon.ico
+assets/
 ```
 
-However, that `.ico` file still contained Flutter's default icon. The custom
-PNG elsewhere in the project was never used by the Windows resource compiler.
+does **not** automatically make it the application icon.
 
-The fix was:
+Images inside `assets/` are only used inside your Flutter UI, for example:
 
-1. Convert the custom artwork to a real, multi-resolution ICO containing
-   16, 20, 24, 32, 40, 48, 64, 128, and 256 pixel images.
-2. Replace `windows/runner/resources/app_icon.ico`.
-3. Keep this resource mapping in `windows/runner/Runner.rc`:
-
-   ```rc
-   IDI_APP_ICON ICON "resources\\app_icon.ico"
-   ```
-
-4. Load that resource as both the large and small window icon in
-   `windows/runner/win32_window.cpp`. This project now sets `hIcon`, `hIconSm`,
-   `WM_SETICON/ICON_BIG`, and `WM_SETICON/ICON_SMALL`.
-5. Clean and rebuild the Windows executable.
-
-The current Windows icon files/wiring are:
-
-```text
-windows/runner/resources/app_icon.ico
-windows/runner/Runner.rc
-windows/runner/resource.h
-windows/runner/win32_window.cpp
+```dart
+Image.asset('assets/images/my_icon.png')
 ```
 
-### Web
+Every platform (Windows, Android, iOS, Web, macOS, Linux) manages its application icon separately.
 
-A web app uses more than one icon. The browser tab/favicon comes from
-`web/index.html`, while installable/PWA icons come from `web/manifest.json`.
-Previously, the custom files and the filenames referenced by those files did
-not consistently match. Web paths and filename capitalization must be exact,
-especially after deployment to a case-sensitive server.
+The easiest solution is to keep **one high-quality PNG** and let Flutter generate all required icon formats automatically.
 
-The fix was to wire these files explicitly:
+---
 
-```text
-web/icons/favicon.ico
-web/icons/apple-touch-icon.png
-web/icons/Icon-192.png
-web/icons/Icon-512.png
-web/icons/Icon-maskable-192.png
-web/icons/Icon-maskable-512.png
-```
+# Recommended Workflow
 
-`web/index.html` now contains the favicon, PNG icon, Apple touch icon, and
-manifest links. `web/manifest.json` now references the matching 192, 512, and
-maskable PNG files. A clean web build then copied them into `build/web/icons/`.
+## Step 1 – Create one master icon
 
-## Recommended source artwork
-
-Keep one master image, for example:
-
-```text
-assets/branding/app_icon_1024.png
-```
+Use your best icon from IconKitchen (or any design tool).
 
 Recommended properties:
 
-- 1024 x 1024 pixels or larger
-- square canvas
-- PNG format
-- important artwork away from the edges
-- transparent background only where the target platform supports it
-- no tiny text, because launcher icons are often displayed at 16–48 pixels
+- 1024 × 1024 pixels
+- PNG
+- Square
+- High quality
+- Keep important artwork away from the edges
+- Avoid tiny text
 
-Do not resize a small image upward. Start with the largest clean original.
+Rename it:
+
+```text
+app_icon.png
+```
+
+Create this folder:
+
+```text
+assets/
+└── branding/
+    └── app_icon.png
+```
+
+Your project should look like:
+
+```text
+your_flutter_project/
+├── android/
+├── ios/
+├── lib/
+├── web/
+├── windows/
+├── macos/
+├── linux/
+├── assets/
+│   └── branding/
+│       └── app_icon.png
+└── pubspec.yaml
+```
+
+> **You only need this single PNG.**
+> Do **not** manually create `.ico` files or dozens of PNG sizes.
+
+---
+
+# Step 2 – Install flutter_launcher_icons
+
+Run:
+
+```bash
+flutter pub add --dev flutter_launcher_icons
+```
+
+---
+
+# Step 3 – Configure pubspec.yaml
+
+Open:
+
+```text
+pubspec.yaml
+```
+
+Add this **at the bottom of the file** (not inside the `flutter:` section):
+
+```yaml
+flutter_launcher_icons:
+  image_path: "assets/branding/app_icon.png"
+
+  android: true
+
+  ios: true
+  remove_alpha_ios: true
+  background_color_ios: "#FFFFFF"
+
+  web:
+    generate: true
+    image_path: "assets/branding/app_icon.png"
+    background_color: "#FFFFFF"
+    theme_color: "#FFFFFF"
+
+  windows:
+    generate: true
+    image_path: "assets/branding/app_icon.png"
+    icon_size: 256
+
+  macos:
+    generate: true
+    image_path: "assets/branding/app_icon.png"
+```
+
+A simplified `pubspec.yaml`:
+
+```yaml
+name: pdf_letter_signer
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_launcher_icons: ^0.14.4
+
+flutter:
+  uses-material-design: true
+
+flutter_launcher_icons:
+  image_path: "assets/branding/app_icon.png"
+
+  android: true
+
+  ios: true
+  remove_alpha_ios: true
+  background_color_ios: "#FFFFFF"
+
+  web:
+    generate: true
+    image_path: "assets/branding/app_icon.png"
+    background_color: "#FFFFFF"
+    theme_color: "#FFFFFF"
+
+  windows:
+    generate: true
+    image_path: "assets/branding/app_icon.png"
+    icon_size: 256
+
+  macos:
+    generate: true
+    image_path: "assets/branding/app_icon.png"
+```
+
+---
+
+# Step 4 – Generate platform icons
+
+Run:
+
+```bash
+flutter pub get
+dart run flutter_launcher_icons
+```
+
+The package automatically creates:
+
+- Android launcher icons
+- iOS AppIcon assets
+- Windows `.ico`
+- Web icons
+- macOS icons
+
+You **do not** need to manually generate:
+
+- `.ico`
+- `16×16`
+- `32×32`
+- `48×48`
+- `192×192`
+- `512×512`
+- Android mipmap folders
+- iOS AppIcon files
+
+---
+
+# Step 5 – Clean and rebuild
+
+```bash
+flutter clean
+flutter pub get
+```
+
+---
 
 ## Windows
 
-Required file:
-
-```text
-windows/runner/resources/app_icon.ico
-```
-
-An ICO should contain multiple resolutions, not merely be a renamed PNG.
-Confirm `windows/runner/Runner.rc` points to it. Then rebuild:
-
-```powershell
-flutter clean
-flutter pub get
+```bash
 flutter build windows
 ```
 
-The built executable is normally under:
+or
 
-```text
-build/windows/x64/runner/Release/<app_name>.exe
+```bash
+flutter run -d windows
 ```
 
-If the old icon remains:
-
-1. Close the running app.
-2. Unpin its old taskbar shortcut.
-3. Delete old desktop/Start Menu shortcuts.
-4. Build again and launch the newly built executable directly.
-5. Pin the new executable again.
-
-Explorer may cache executable icons. Restarting Windows Explorer or signing out
-can refresh that cache, but first verify that you are launching the new `.exe`
-and not an older copy.
-
-## Web and PWA
-
-Use at least:
-
-```text
-web/icons/favicon.ico
-web/icons/apple-touch-icon.png
-web/icons/Icon-192.png
-web/icons/Icon-512.png
-web/icons/Icon-maskable-192.png
-web/icons/Icon-maskable-512.png
-```
-
-In `web/index.html`, wire the browser and Apple icons:
-
-```html
-<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<link rel="icon" type="image/x-icon" href="icons/favicon.ico">
-<link rel="icon" type="image/png" sizes="192x192" href="icons/Icon-192.png">
-<link rel="manifest" href="manifest.json">
-```
-
-In `web/manifest.json`, wire the installable app icons:
-
-```json
-"icons": [
-  {
-    "src": "icons/Icon-192.png",
-    "sizes": "192x192",
-    "type": "image/png"
-  },
-  {
-    "src": "icons/Icon-512.png",
-    "sizes": "512x512",
-    "type": "image/png"
-  },
-  {
-    "src": "icons/Icon-maskable-192.png",
-    "sizes": "192x192",
-    "type": "image/png",
-    "purpose": "maskable"
-  },
-  {
-    "src": "icons/Icon-maskable-512.png",
-    "sizes": "512x512",
-    "type": "image/png",
-    "purpose": "maskable"
-  }
-]
-```
-
-Build and verify:
-
-```powershell
-flutter clean
-flutter pub get
-flutter build web
-Get-ChildItem build\web\icons
-```
-
-Browsers aggressively cache favicons, manifests, service workers, and PWA
-icons. If the old icon remains:
-
-- hard refresh the page;
-- clear site data/cache in browser developer tools;
-- unregister the old service worker;
-- uninstall and reinstall the PWA if it was already installed;
-- confirm the deployed server contains the newly built `build/web` files;
-- confirm filename capitalization matches exactly.
+---
 
 ## Android
 
-Android launcher icons normally live under density-specific resource folders:
-
-```text
-android/app/src/main/res/mipmap-mdpi/
-android/app/src/main/res/mipmap-hdpi/
-android/app/src/main/res/mipmap-xhdpi/
-android/app/src/main/res/mipmap-xxhdpi/
-android/app/src/main/res/mipmap-xxxhdpi/
-android/app/src/main/res/mipmap-anydpi-v26/
-```
-
-`android/app/src/main/AndroidManifest.xml` should reference the launcher icon:
-
-```xml
-<application android:icon="@mipmap/ic_launcher" ...>
-```
-
-Modern Android supports adaptive icons with foreground, background, and
-optional monochrome layers. Generate all density files; do not replace only
-one `ic_launcher.png`.
-
-After changing them:
-
-```powershell
-flutter clean
-flutter pub get
+```bash
 flutter build apk
 ```
 
-If a device still shows the old icon, uninstall the old app before reinstalling
-the new APK. Some launchers cache icons.
-
-## iOS and iPadOS
-
-Icons are defined by the asset catalog:
-
-```text
-ios/Runner/Assets.xcassets/AppIcon.appiconset/
-ios/Runner/Assets.xcassets/AppIcon.appiconset/Contents.json
-```
-
-Every filename declared in `Contents.json` must exist at its required size.
-Use opaque PNGs for the main iOS app icon; Apple app icons should not rely on
-transparency.
-
-Build from macOS with Xcode installed:
+or
 
 ```bash
-flutter clean
-flutter pub get
+flutter run -d android
+```
+
+---
+
+## Web
+
+```bash
+flutter build web
+```
+
+or
+
+```bash
+flutter run -d chrome
+```
+
+---
+
+## iOS
+
+```bash
 flutter build ios
 ```
 
-If the simulator/device caches the old icon, delete the installed app and
-install it again.
+or
+
+```bash
+flutter run -d ios
+```
+
+---
 
 ## macOS
 
-The macOS icon asset catalog is:
-
-```text
-macos/Runner/Assets.xcassets/AppIcon.appiconset/
-macos/Runner/Assets.xcassets/AppIcon.appiconset/Contents.json
-```
-
-Keep all sizes referenced by `Contents.json`. The Xcode project selects the
-asset set named `AppIcon`.
-
-Build from macOS:
-
 ```bash
-flutter clean
-flutter pub get
 flutter build macos
 ```
 
-Finder and the Dock may cache icons. Quit the old app, remove its old Dock
-entry, and open the newly built `.app` before pinning it again.
-
-## Linux
-
-Flutter's Linux runner does not provide one universal embedded launcher-icon
-file. Linux desktop environments normally get the icon from the application
-package and a `.desktop` launcher file.
-
-For packaging, install a PNG or SVG using a stable icon name, for example:
-
-```text
-/usr/share/icons/hicolor/256x256/apps/pdf-letter-signer.png
-```
-
-Create/install a launcher such as:
-
-```ini
-[Desktop Entry]
-Type=Application
-Name=PDF Letter Signer
-Comment=Open, complete, sign, and export PDF letters
-Exec=/opt/pdf-letter-signer/pdf_letter_signer
-Icon=pdf-letter-signer
-Terminal=false
-Categories=Office;
-```
-
-The `Icon` value is the icon name without `.png`, when installed into the
-system icon theme. For a local development launcher, it can instead be an
-absolute path to a PNG.
-
-Typical package contents are:
-
-```text
-/opt/pdf-letter-signer/                       application bundle
-/usr/share/applications/pdf-letter-signer.desktop
-/usr/share/icons/hicolor/256x256/apps/pdf-letter-signer.png
-```
-
-Build the Flutter bundle with:
+or
 
 ```bash
-flutter clean
-flutter pub get
-flutter build linux
+flutter run -d macos
 ```
 
-The raw Flutter build creates the application bundle, but desktop menu
-integration is normally completed by a `.deb`, RPM, AppImage, Snap, Flatpak,
-or an installer script. After installing a new icon, the desktop environment
-may require logout/login or an icon-cache refresh.
+---
 
-## Optional: generate most icons automatically
+# If the old icon still appears
 
-The `flutter_launcher_icons` development package can generate Android, iOS,
-web, Windows, and macOS icon resources from one source PNG. Check the package's
-current documentation before selecting a version or configuration options.
-Linux desktop launcher/package integration still needs to be handled by the
-Linux packaging method you choose.
+The icon was probably generated correctly.
 
-A typical configuration concept is:
+The operating system is usually showing a cached version.
+
+---
+
+## Windows
+
+1. Close the application.
+2. Open the newly built executable:
+
+```
+build/windows/x64/runner/Release/
+```
+
+3. Remove old desktop shortcuts.
+4. Unpin the old taskbar shortcut.
+5. Pin the new executable again.
+
+If necessary, restart **Windows Explorer** from Task Manager.
+
+---
+
+## Android
+
+Uninstall the existing app before reinstalling.
+
+Many launchers cache icons.
+
+---
+
+## Web
+
+Browsers cache:
+
+- favicon
+- manifest
+- service worker
+- PWA icons
+
+Try:
+
+- Hard refresh
+- Clear site data
+- Clear browser cache
+- Unregister the service worker
+- Reinstall the PWA
+
+---
+
+## iOS / macOS
+
+Delete the installed app and reinstall it.
+
+macOS may also cache the Dock icon.
+
+---
+
+# About IconKitchen
+
+IconKitchen usually gives you a ZIP file containing many folders.
+
+You have two choices.
+
+---
+
+## Recommended
+
+Take the **1024×1024 PNG** and save it as:
+
+```
+assets/branding/app_icon.png
+```
+
+Run:
+
+```bash
+dart run flutter_launcher_icons
+```
+
+Done.
+
+---
+
+## Manual
+
+You can manually copy files into:
+
+- Android mipmap folders
+- iOS AppIcon
+- Windows ICO
+- Web icons
+- macOS AppIcon
+
+This works, but it is much easier to make mistakes.
+
+---
+
+# Android Adaptive Icons (Optional)
+
+If IconKitchen provides:
+
+```
+foreground.png
+background.png
+monochrome.png
+```
+
+you can configure:
 
 ```yaml
-dev_dependencies:
-  flutter_launcher_icons: <current-version>
-
 flutter_launcher_icons:
-  image_path: assets/branding/app_icon_1024.png
+  image_path: assets/branding/app_icon.png
+
   android: true
+
+  adaptive_icon_background: "#FFFFFF"
+
+  adaptive_icon_foreground: assets/branding/app_icon_foreground.png
+
+  adaptive_icon_monochrome: assets/branding/app_icon_monochrome.png
+
   ios: true
+
   web:
     generate: true
+
   windows:
     generate: true
+
   macos:
     generate: true
 ```
 
-Then run the command specified by the package's current documentation. Always
-inspect the generated native files and perform clean platform builds afterward.
+If you do not have these files, ignore this section.
 
-## Checklist for every icon update
+The standard configuration is perfectly fine.
 
-- [ ] Start from a square 1024 x 1024 master image.
-- [ ] Generate every size required by each target platform.
-- [ ] Confirm native files were replaced, not only Flutter assets.
-- [ ] Confirm all manifest/resource filenames and capitalization match.
-- [ ] Run `flutter clean` and `flutter pub get`.
-- [ ] Build each target platform again.
-- [ ] Inspect the new executable/app/build output, not an older installed copy.
-- [ ] Remove old shortcuts or installed apps when testing.
-- [ ] Clear browser/PWA/desktop icon caches if necessary.
-- [ ] For Linux, package both the icon and `.desktop` launcher.
+---
 
+# Linux
+
+Flutter can build Linux applications:
+
+```bash
+flutter build linux
+```
+
+However, Linux desktop launchers require additional packaging.
+
+Usually you also need:
+
+- `.desktop` launcher
+- PNG or SVG icon
+- AppImage, Flatpak, Snap, `.deb`, or RPM package
+
+This is separate from Flutter icon generation.
+
+---
+
+# Final Checklist
+
+- ✅ Create `assets/branding/app_icon.png`
+- ✅ Use a **1024×1024** PNG
+- ✅ Configure `flutter_launcher_icons`
+- ✅ Run:
+
+```bash
+flutter pub get
+dart run flutter_launcher_icons
+flutter clean
+flutter pub get
+```
+
+- ✅ Rebuild the application
+- ✅ Test the **newly built executable**, not an old copy
+- ✅ Remove cached shortcuts if necessary
+
+---
+
+# Most Important Command
+
+```bash
+dart run flutter_launcher_icons
+```
+
+This single command generates almost every platform-specific icon automatically from your master PNG.
