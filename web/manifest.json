@@ -1,12 +1,12 @@
 {
-    "name": "pdf_letter_signer",
-    "short_name": "pdf_letter_signer",
+    "name": "PDF Letter Signer",
+    "short_name": "PDF Signer",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "background_color": "#0868D7",
+    "theme_color": "#0868D7",
+    "description": "Open, complete, sign, and export PDF letters.",
+    "orientation": "any",
     "prefer_related_applications": false,
     "icons": [
         {
